@@ -5,6 +5,7 @@ import shutil
 import time
 import tkinter as tk
 from crop import crop_image
+from add_text_to_image import add_text_to_image
 from tkinter import filedialog, messagebox, ttk
 from statistics import median, mean
 from collections import defaultdict
@@ -57,8 +58,18 @@ class App(tk.Tk):
         self.sep_model_var = tk.BooleanVar(value=False)
         self.save_passed_var = tk.BooleanVar(value=False)
 
-        self.minArea = 0
-        self.maxArea = 0
+        self.model1_areas          = []
+        self.model1_rectangularity = []
+        self.model1_circularity    = []
+        self.model1_anisometry     = []
+        self.model1_radius         = []
+        
+        self.model2_areas          = []
+        self.model2_rectangularity = []
+        self.model2_circularity    = []
+        self.model2_anisometry     = []
+        self.model2_radius         = []
+
         self.models = []
 
         # UI Layout
@@ -203,10 +214,31 @@ class App(tk.Tk):
     def extract_blob(self,num_results,r,model_path):
         ## This saves a cropped image of each blob to folder based on the detected blob.
         for i in range(num_results):
-            model = int(r.get("ModelNumber0"+str(i+1),""))
+            radius = int(r.get("InnerCircleRadius0"+str(i+1),""))
+            circularity = int(r.get("BlobCircularity0"+str(i+1),""))
+            anisometry = int(r.get("Anisometry0"+str(i+1),""))
+            rectangularity = int(r.get("Rectangularity0"+str(i+1),""))
+            area = int(r.get("BlobArea0"+str(i+1),""))
+            #print('test output ' + str(radius) + "... " + str(i))
+
+            if radius < 3000:
+                model = 1
+                self.model1_areas.append(area)
+                self.model1_rectangularity.append(rectangularity)
+                self.model1_circularity.append(circularity)
+                self.model1_anisometry.append(anisometry)
+                self.model1_radius.append(radius)
+            else:
+                model = 2
+                self.model2_areas.append(area)
+                self.model2_rectangularity.append(rectangularity)
+                self.model2_circularity.append(circularity)
+                self.model2_anisometry.append(anisometry)
+                self.model2_radius.append(radius)
 
             if not (model in self.models):
                 # we need to make the model directory
+                os.mkdir(self.failed_dir_var.get().strip() + "\\model" + str(model) + '_info')
                 os.mkdir(self.failed_dir_var.get().strip() + "\\model" + str(model))
                 self.models.append(model)
             
@@ -216,9 +248,11 @@ class App(tk.Tk):
             height = 200
             image_path = r.get("ImageDirectory","") + "\\" + r.get("ImageName","")
             blob_path = self.failed_dir_var.get().strip() + "/model" + str(model) + "/" + str(i) + "_" + r.get("ImageName","")
-                       
+            blob_info_path = self.failed_dir_var.get().strip() + "/model" + str(model) + "_info/" + str(i) + "_" + r.get("ImageName","")
             cropBox = (posX-length/2,posY-height/2,posX+length/2,posY+length/2)
             crop_image(image_path,blob_path,cropBox)
+            imageInfoString = 'Area' + str(area) + ' \n' + 'Circ '+ str(circularity) + ' \n' + 'Rect '+ str(rectangularity) + ' \n' + 'Ansi '+ str(anisometry) + ' \n' + 'InnerRad '+ str(radius) + ' \n'
+            add_text_to_image(blob_path,blob_info_path,imageInfoString,(5,5),(255),None)
 
     def _run(self, execute=False):
         self.text.delete("1.0", tk.END)
@@ -245,19 +279,23 @@ class App(tk.Tk):
         total_rows = len(rows)
         under_max = []
         blobAreas = []
-        for r in rows:           
-            try:
-                expected_max = int(r.get("BlobNumSearchMax",""))
-                val = to_float(r.get("BlobNumResults", ""))
-                if val != val:  # NaN
+        skipfirstrow = False
+        for r in rows:       
+            if skipfirstrow == False: 
+                skipfirstrow = True
+            else:
+                try:
+                    expected_max = int(r.get("BlobNumSearchMax",""))
+                    val = to_float(r.get("BlobNumResults", ""))
+                    if val != val:  # NaN
+                        continue
+                    if val < expected_max:
+                        under_max.append((r.get("ImageName", ""), val))
+                    self.extract_blob(int(val),r,csv_path) #for now use the csv path need to make it its own thing. 
+                except:
+                    ## without this try/except the last and first line of the csv will throw a fault
+                    print('i have failed')
                     continue
-                if val < expected_max:
-                    under_max.append((r.get("ImageName", ""), val))
-                self.extract_blob(int(val),r,csv_path) #for now use the csv path need to make it its own thing. 
-                blobAreas = self.parse_blob_area(int(val),r,blobAreas)
-            except:
-                ## without this try/except the last and first line of the csv will throw a fault
-                continue
 
         # Group rows by image
         grouped = defaultdict(list)
@@ -355,8 +393,22 @@ class App(tk.Tk):
 
         # UI
         self.text.insert(tk.END, f"CSV: {csv_path}\nTotal rows: {total_rows}\nExpected max: {expected_max}\n")
-        self.text.insert(tk.END, f"Under-max count: {len(under_max)}\n")
-        self.text.insert(tk.END, f"Median blob size: " + str(median(blobAreas)) + " Min blob size: " + str(min(blobAreas)) + " Max blob size: " + str(max(blobAreas))+"\n\n")
+        self.text.insert(tk.END, f"Under-max count: {len(under_max)}\n\n")
+        self.text.insert(tk.END, f"Model 1 Information:\n")
+        self.text.insert(tk.END, f"Found " + str(len(self.model1_areas)) +" matches\n")
+        self.text.insert(tk.END, f"Median blob size: " + str(median(self.model1_areas)) + " Min blob size: " + str(min(self.model1_areas)) + " Max blob size: " + str(max(self.model1_areas))+"\n")
+        self.text.insert(tk.END, f"Median radius: " + str(median(self.model1_radius)) + " Min radius: " + str(min(self.model1_radius)) + " Max radius: " + str(max(self.model1_radius))+"\n")
+        self.text.insert(tk.END, f"Median rectangularity: " + str(median(self.model1_rectangularity)) + " Min rectangularity: " + str(min(self.model1_rectangularity)) + " Max rectangularity: " + str(max(self.model1_rectangularity))+"\n")
+        self.text.insert(tk.END, f"Median circularity: " + str(median(self.model1_circularity)) + " Min circularity: " + str(min(self.model1_circularity)) + " Max circularity: " + str(max(self.model1_circularity))+"\n")
+        self.text.insert(tk.END, f"Median anisometry: " + str(median(self.model1_anisometry)) + " Min anisometry: " + str(min(self.model1_anisometry)) + " Max anisometry: " + str(max(self.model1_anisometry))+"\n\n")
+        
+        self.text.insert(tk.END, f"Model 2 Information:\n")
+        self.text.insert(tk.END, f"Found " + str(len(self.model2_areas)) +" matches\n")
+        self.text.insert(tk.END, f"Median blob size: " + str(median(self.model2_areas)) + " Min blob size: " + str(min(self.model2_areas)) + " Max blob size: " + str(max(self.model2_areas))+"\n")
+        self.text.insert(tk.END, f"Median radius: " + str(median(self.model2_radius)) + " Min radius: " + str(min(self.model2_radius)) + " Max radius: " + str(max(self.model2_radius))+"\n")
+        self.text.insert(tk.END, f"Median rectangularity: " + str(median(self.model2_rectangularity)) + " Min rectangularity: " + str(min(self.model2_rectangularity)) + " Max rectangularity: " + str(max(self.model2_rectangularity))+"\n")
+        self.text.insert(tk.END, f"Median circularity: " + str(median(self.model2_circularity)) + " Min circularity: " + str(min(self.model2_circularity)) + " Max circularity: " + str(max(self.model2_circularity))+"\n")
+        self.text.insert(tk.END, f"Median anisometry: " + str(median(self.model2_anisometry)) + " Min anisometry: " + str(min(self.model2_anisometry)) + " Max anisometry: " + str(max(self.model2_anisometry))+"\n\n")
         
         self.text.insert(tk.END, f"Log written to: {log_path}\n")
         if self.save_passed_var.get():
