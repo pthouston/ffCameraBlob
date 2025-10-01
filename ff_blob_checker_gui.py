@@ -5,9 +5,9 @@ import shutil
 import time
 import tkinter as tk
 from crop import crop_image
-from add_text_to_image import add_text_to_image
+from overlay_blob_data import add_overlay_to_image
 from tkinter import filedialog, messagebox, ttk
-from statistics import median, mean
+from statistics import median, mean, quantiles
 from collections import defaultdict
 
 APP_TITLE = "FastForward Blob Checker"
@@ -242,7 +242,7 @@ class App(tk.Tk):
                 os.mkdir(self.failed_dir_var.get().strip() + "\\model" + str(model))
                 self.models.append(model)
             
-            posY =  490 ##int(r.get("BlobPositionY0"+str(i+1),""))
+            posY =  int(int(r.get("BlobPositionY0"+str(i+1),""))/100) 
             posX = int(int(r.get("BlobPositionX0"+str(i+1),""))/100)            
             length = 150   ##hard coding these for times sake, but can be parsed
             height = 200
@@ -251,8 +251,10 @@ class App(tk.Tk):
             blob_info_path = self.failed_dir_var.get().strip() + "/model" + str(model) + "_info/" + str(i) + "_" + r.get("ImageName","")
             cropBox = (posX-length/2,posY-height/2,posX+length/2,posY+length/2)
             crop_image(image_path,blob_path,cropBox)
-            imageInfoString = 'Area' + str(area) + ' \n' + 'Circ '+ str(circularity) + ' \n' + 'Rect '+ str(rectangularity) + ' \n' + 'Ansi '+ str(anisometry) + ' \n' + 'InnerRad '+ str(radius) + ' \n'
-            add_text_to_image(blob_path,blob_info_path,imageInfoString,(5,5),(255),None)
+            circX = int(int(r.get("CircleX0"+str(i+1),""))/100)
+            circY = int(int(r.get("CircleY0"+str(i+1),""))/100)
+            imageInfoString = 'Area ' + str(area) + ' \n' + 'Circ '+ str(circularity) + ' \n' + 'Rect '+ str(rectangularity) + ' \n' + 'Ansi '+ str(anisometry) + ' \n' + 'InnerRad '+ str(radius) + ' \n'
+            add_overlay_to_image(blob_path,blob_info_path,imageInfoString,(5,5),radius/100,circX-(posX-length/2),circY-(posY-height/2),(255),None)
 
     def _run(self, execute=False):
         self.text.delete("1.0", tk.END)
@@ -394,21 +396,23 @@ class App(tk.Tk):
         # UI
         self.text.insert(tk.END, f"CSV: {csv_path}\nTotal rows: {total_rows}\nExpected max: {expected_max}\n")
         self.text.insert(tk.END, f"Under-max count: {len(under_max)}\n\n")
-        self.text.insert(tk.END, f"Model 1 Information:\n")
-        self.text.insert(tk.END, f"Found " + str(len(self.model1_areas)) +" matches\n")
-        self.text.insert(tk.END, f"Median blob size: " + str(median(self.model1_areas)) + " Min blob size: " + str(min(self.model1_areas)) + " Max blob size: " + str(max(self.model1_areas))+"\n")
-        self.text.insert(tk.END, f"Median radius: " + str(median(self.model1_radius)) + " Min radius: " + str(min(self.model1_radius)) + " Max radius: " + str(max(self.model1_radius))+"\n")
-        self.text.insert(tk.END, f"Median rectangularity: " + str(median(self.model1_rectangularity)) + " Min rectangularity: " + str(min(self.model1_rectangularity)) + " Max rectangularity: " + str(max(self.model1_rectangularity))+"\n")
-        self.text.insert(tk.END, f"Median circularity: " + str(median(self.model1_circularity)) + " Min circularity: " + str(min(self.model1_circularity)) + " Max circularity: " + str(max(self.model1_circularity))+"\n")
-        self.text.insert(tk.END, f"Median anisometry: " + str(median(self.model1_anisometry)) + " Min anisometry: " + str(min(self.model1_anisometry)) + " Max anisometry: " + str(max(self.model1_anisometry))+"\n\n")
+        if 1 in self.models:
+            self.text.insert(tk.END, f"Model 1 Information:\n")
+            self.text.insert(tk.END, f"Found " + str(len(self.model1_areas)) +" matches\n")
+            self.text.insert(tk.END, f"Median blob size: " + str(median(self.model1_areas)) + " Min blob size: " + str(min(self.model1_areas)) + " Max blob size: " + str(max(self.model1_areas))+"\n")
+            self.text.insert(tk.END, f"Median radius: " + str(median(self.model1_radius)) + " Min radius: " + str(min(self.model1_radius)) + " Max radius: " + str(max(self.model1_radius))+"\n")
+            self.text.insert(tk.END, f"Median rectangularity: " + str(median(self.model1_rectangularity)) + " Min rectangularity: " + str(min(self.model1_rectangularity)) + " Max rectangularity: " + str(max(self.model1_rectangularity))+"\n")
+            self.text.insert(tk.END, f"Median circularity: " + str(median(self.model1_circularity)) + " Min circularity: " + str(min(self.model1_circularity)) + " Max circularity: " + str(max(self.model1_circularity))+"\n")
+            self.text.insert(tk.END, f"Median anisometry: " + str(median(self.model1_anisometry)) + " Min anisometry: " + str(min(self.model1_anisometry)) + " Max anisometry: " + str(max(self.model1_anisometry))+"\n\n")
         
-        self.text.insert(tk.END, f"Model 2 Information:\n")
-        self.text.insert(tk.END, f"Found " + str(len(self.model2_areas)) +" matches\n")
-        self.text.insert(tk.END, f"Median blob size: " + str(median(self.model2_areas)) + " Min blob size: " + str(min(self.model2_areas)) + " Max blob size: " + str(max(self.model2_areas))+"\n")
-        self.text.insert(tk.END, f"Median radius: " + str(median(self.model2_radius)) + " Min radius: " + str(min(self.model2_radius)) + " Max radius: " + str(max(self.model2_radius))+"\n")
-        self.text.insert(tk.END, f"Median rectangularity: " + str(median(self.model2_rectangularity)) + " Min rectangularity: " + str(min(self.model2_rectangularity)) + " Max rectangularity: " + str(max(self.model2_rectangularity))+"\n")
-        self.text.insert(tk.END, f"Median circularity: " + str(median(self.model2_circularity)) + " Min circularity: " + str(min(self.model2_circularity)) + " Max circularity: " + str(max(self.model2_circularity))+"\n")
-        self.text.insert(tk.END, f"Median anisometry: " + str(median(self.model2_anisometry)) + " Min anisometry: " + str(min(self.model2_anisometry)) + " Max anisometry: " + str(max(self.model2_anisometry))+"\n\n")
+        if 2 in self.models:
+            self.text.insert(tk.END, f"Model 2 Information:\n")
+            self.text.insert(tk.END, f"Found " + str(len(self.model2_areas)) +" matches\n")
+            self.text.insert(tk.END, f"Median blob size: " + str(median(self.model2_areas)) + " Min blob size: " + str(min(self.model2_areas)) + " Max blob size: " + str(max(self.model2_areas))+"\n")
+            self.text.insert(tk.END, f"Median radius: " + str(median(self.model2_radius)) + " Min radius: " + str(min(self.model2_radius)) + " Max radius: " + str(max(self.model2_radius))+"\n")
+            self.text.insert(tk.END, f"Median rectangularity: " + str(median(self.model2_rectangularity)) + " Min rectangularity: " + str(min(self.model2_rectangularity)) + " Max rectangularity: " + str(max(self.model2_rectangularity))+"\n")
+            self.text.insert(tk.END, f"Median circularity: " + str(median(self.model2_circularity)) + " Min circularity: " + str(min(self.model2_circularity)) + " Max circularity: " + str(max(self.model2_circularity))+"\n")
+            self.text.insert(tk.END, f"Median anisometry: " + str(median(self.model2_anisometry)) + " Min anisometry: " + str(min(self.model2_anisometry)) + " Max anisometry: " + str(max(self.model2_anisometry))+"\n\n")
         
         self.text.insert(tk.END, f"Log written to: {log_path}\n")
         if self.save_passed_var.get():
