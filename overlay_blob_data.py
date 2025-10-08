@@ -37,6 +37,7 @@ def add_overlay_to_image(
         print(f"Error opening image: {e}")
         return
 
+    img.load()
     # 2. Create a drawing context
     draw = ImageDraw.Draw(img)
 

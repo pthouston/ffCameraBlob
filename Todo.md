@@ -1,0 +1,6 @@
+- fix issues with over writing previous folders/files
+- make the model copying and the overwriting with the blob stats a toggle.
+- make inner circle threshold a variable thats remembered
+- make the array of models that we compile statistics for dynamic.
+- default to copy - done
+- remember the csv path - done

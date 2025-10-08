@@ -9,6 +9,7 @@ from overlay_blob_data import add_overlay_to_image
 from tkinter import filedialog, messagebox, ttk
 from statistics import median, mean, quantiles
 from collections import defaultdict
+import json
 
 APP_TITLE = "FastForward Blob Checker"
 
@@ -35,6 +36,21 @@ def extract_model_from_name(name, fallback):
     m = re.search(r"N\d{3}", str(name))
     return m.group(0) if m else fallback
 
+def load_csvPath():
+    if os.path.exists('data.json'):
+        with open('data.json', 'r') as f:
+            data = json.load(f)
+            return data.get("filename", "")
+    else:
+        return ""
+
+def save_csvPath(csv_path):
+    json_info = {
+    "filename": csv_path
+    }
+    with open('data.json', 'w') as f:
+        json.dump(json_info, f, indent=4) # Use indent for human-readable formatting
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -52,7 +68,7 @@ class App(tk.Tk):
         self.failed_same_as_csv_var = tk.BooleanVar(value=True)
         self.failed_dir_var = tk.StringVar()
 
-        self.action_mode_var = tk.StringVar(value="move")
+        self.action_mode_var = tk.StringVar(value="copy")
         self.save_logs_var = tk.BooleanVar(value=False)
 
         self.sep_model_var = tk.BooleanVar(value=False)
@@ -72,6 +88,8 @@ class App(tk.Tk):
 
         self.models = []
 
+        self.ts = time.strftime("%Y%m%d_%H%M%S")
+
         # UI Layout
         self._build_ui()
 
@@ -84,6 +102,7 @@ class App(tk.Tk):
         ttk.Label(frm, text="CSV file to analyze:").grid(row=0, column=0, sticky="w", **pad)
         ttk.Entry(frm, textvariable=self.csv_path_var, width=70).grid(row=0, column=1, sticky="we", **pad)
         ttk.Button(frm, text="Browse…", command=self.browse_csv).grid(row=0, column=2, **pad)
+        self.csv_path_var.set(load_csvPath())
 
         # Expected
         ttk.Label(frm, text="Expected BlobNumResults (max):").grid(row=1, column=0, sticky="w", **pad)
@@ -211,7 +230,7 @@ class App(tk.Tk):
                 self.maxArea = area
             return areas
         
-    def extract_blob(self,num_results,r,model_path):
+    def extract_blob(self,num_results,r,csv_path):
         ## This saves a cropped image of each blob to folder based on the detected blob.
         for i in range(num_results):
             radius = int(r.get("InnerCircleRadius0"+str(i+1),""))
@@ -221,7 +240,7 @@ class App(tk.Tk):
             area = int(r.get("BlobArea0"+str(i+1),""))
             #print('test output ' + str(radius) + "... " + str(i))
 
-            if radius < 3000:
+            if radius < 2800:
                 model = 1
                 self.model1_areas.append(area)
                 self.model1_rectangularity.append(rectangularity)
@@ -238,24 +257,27 @@ class App(tk.Tk):
 
             if not (model in self.models):
                 # we need to make the model directory
-                os.mkdir(self.failed_dir_var.get().strip() + "\\model" + str(model) + '_info')
-                os.mkdir(self.failed_dir_var.get().strip() + "\\model" + str(model))
+                #print(f"Creating model directory for model {model} at " + os.path.dirname(csv_path)+f"/models{self.ts}/model{model}")
+                modelDir = os.path.dirname(csv_path) + f"/blobs{self.ts}"
+                os.mkdir(modelDir) if not os.path.exists(modelDir) else None
+                #os.mkdir(modelDir + f"/model" + str(model) + '_info')
+                os.mkdir(modelDir + f"/model" + str(model))
                 self.models.append(model)
             
             posY =  int(int(r.get("BlobPositionY0"+str(i+1),""))/100) 
             posX = int(int(r.get("BlobPositionX0"+str(i+1),""))/100)            
-            length = 150   ##hard coding these for times sake, but can be parsed
-            height = 200
+            width = int(int(r.get("BlobWidth0"+str(i+1),""))/100) +50
+            length = int(int(r.get("BlobLength0"+str(i+1),""))/100) + 70
             image_path = r.get("ImageDirectory","") + "\\" + r.get("ImageName","")
-            blob_path = self.failed_dir_var.get().strip() + "/model" + str(model) + "/" + str(i) + "_" + r.get("ImageName","")
-            blob_info_path = self.failed_dir_var.get().strip() + "/model" + str(model) + "_info/" + str(i) + "_" + r.get("ImageName","")
-            cropBox = (posX-length/2,posY-height/2,posX+length/2,posY+length/2)
+            blob_path = modelDir + "/model" + str(model) + "/" + os.path.splitext(r.get("ImageName",""))[0] + "_" + str(i) + "temp.bmp"
+            blob_info_path = modelDir + "/model" + str(model) + "/" + os.path.splitext(r.get("ImageName",""))[0] + "_" + str(i) + ".bmp"
+            cropBox = (posX-width/2,posY-length/2,posX+width/2,posY+width/2)
             crop_image(image_path,blob_path,cropBox)
             circX = int(int(r.get("CircleX0"+str(i+1),""))/100)
             circY = int(int(r.get("CircleY0"+str(i+1),""))/100)
-            imageInfoString = 'Area ' + str(area) + ' \n' + 'Circ '+ str(circularity) + ' \n' + 'Rect '+ str(rectangularity) + ' \n' + 'Ansi '+ str(anisometry) + ' \n' + 'InnerRad '+ str(radius) + ' \n'
-            add_overlay_to_image(blob_path,blob_info_path,imageInfoString,(5,5),radius/100,circX-(posX-length/2),circY-(posY-height/2),(255),None)
-
+            imageInfoString = 'Area ' + str(area) + '  ' + 'Circ '+ str(circularity) + '  ' + 'Rect '+ str(rectangularity) + '\n' + 'Ansi '+ str(anisometry) + ' ' + 'InnerRad '+ str(radius) + ' \n'
+            add_overlay_to_image(blob_path,blob_info_path,imageInfoString,(5,5),radius/100,circX-(posX-width/2),circY-(posY-length/2),(255),None)
+            os.remove(blob_path) if os.path.exists(blob_path) else None
     def _run(self, execute=False):
         self.text.delete("1.0", tk.END)
 
@@ -294,10 +316,11 @@ class App(tk.Tk):
                     if val < expected_max:
                         under_max.append((r.get("ImageName", ""), val))
                     self.extract_blob(int(val),r,csv_path) #for now use the csv path need to make it its own thing. 
-                except:
-                    ## without this try/except the last and first line of the csv will throw a fault
-                    print('i have failed')
-                    continue
+                
+                except Exception as e:
+                   ## without this try/except the last and first line of the csv will throw a fault
+                    print(f"i have failed: {e}")
+                    #continue
 
         # Group rows by image
         grouped = defaultdict(list)
@@ -386,6 +409,8 @@ class App(tk.Tk):
 
         failed_results = handle_failed(under_max)
         passed_results = handle_passed(passed) if self.save_passed_var.get() else []
+
+        save_csvPath(csv_path)
 
         if log_path:
             with open(log_path, "w", newline="", encoding="utf-8") as lf:
